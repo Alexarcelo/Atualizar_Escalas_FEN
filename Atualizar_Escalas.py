@@ -52,25 +52,21 @@ def puxar_aba_simples(id_gsheet, nome_aba, nome_df):
 
     st.session_state[nome_df] = pd.DataFrame(sheet_data[1:], columns=sheet_data[0])
 
-def verificar_cadastros_veic_mot_guias():
+def gerar_listas_de_nao_cadastrados(df, coluna):
 
-    lista_veiculos_a_atualizar = st.session_state.df_escalas_atualizar['Veiculo'].unique().tolist()
+    lista_a_atualizar = st.session_state.df_escalas_atualizar[coluna].unique().tolist()
 
-    lista_veiculos_phoenix = st.session_state.df_escalas['Veiculo'].unique().tolist()
+    lista_phoenix = st.session_state[df][coluna].unique().tolist()
 
-    lista_veiculos_nao_cadastrados = list(set(lista_veiculos_a_atualizar) - set(lista_veiculos_phoenix))
+    lista_nao_cadastrados = list(set(lista_a_atualizar) - set(lista_phoenix))
 
-    lista_motoristas_a_atualizar = st.session_state.df_escalas_atualizar['Motorista'].unique().tolist()
+    return lista_nao_cadastrados
 
-    lista_motoristas_phoenix = st.session_state.df_escalas['Motorista'].unique().tolist()
+def gerar_mensagens_de_nao_cadastrados(lista_escalas_nao_cadastrados, lista_veiculos_nao_cadastrados, lista_motoristas_nao_cadastrados, lista_guias_nao_cadastrados):
 
-    lista_motoristas_nao_cadastrados = list(set(lista_motoristas_a_atualizar) - set(lista_motoristas_phoenix))
+    if len(lista_escalas_nao_cadastrados)>0:
 
-    lista_guias_a_atualizar = st.session_state.df_escalas_atualizar['Guia'].unique().tolist()
-
-    lista_guias_phoenix = st.session_state.df_escalas['Guia'].unique().tolist()
-
-    lista_guias_nao_cadastrados = list(set(lista_guias_a_atualizar) - set(lista_guias_phoenix))
+        st.error(f'As escalas {", ".join(lista_escalas_nao_cadastrados)} não existem no Phoenix. Precisa ajustar a nomenclatura na planilha e tentar novamente')
 
     if len(lista_veiculos_nao_cadastrados)>0:
 
@@ -84,9 +80,21 @@ def verificar_cadastros_veic_mot_guias():
 
         st.error(f'Os guias {", ".join(lista_guias_nao_cadastrados)} não existem no Phoenix. Precisa ajustar a nomenclatura na planilha e tentar novamente')
 
-    if len(lista_veiculos_nao_cadastrados)>0 or len(lista_motoristas_nao_cadastrados)>0 or len(lista_guias_nao_cadastrados)>0:
+    if len(lista_escalas_nao_cadastrados)>0 or len(lista_veiculos_nao_cadastrados)>0 or len(lista_motoristas_nao_cadastrados)>0 or len(lista_guias_nao_cadastrados)>0:
 
         st.stop()
+
+def verificar_cadastros_veic_mot_guias():
+
+    lista_escalas_nao_cadastrados = gerar_listas_de_nao_cadastrados('df_escalas', 'Escala')
+
+    lista_veiculos_nao_cadastrados = gerar_listas_de_nao_cadastrados('df_veiculos', 'Veiculo')
+
+    lista_motoristas_nao_cadastrados = gerar_listas_de_nao_cadastrados('df_motoristas', 'Motorista')
+
+    lista_guias_nao_cadastrados = gerar_listas_de_nao_cadastrados('df_guias', 'Guia')
+
+    gerar_mensagens_de_nao_cadastrados(lista_escalas_nao_cadastrados, lista_veiculos_nao_cadastrados, lista_motoristas_nao_cadastrados, lista_guias_nao_cadastrados)
 
 def update_scale(payload):
 
@@ -128,6 +136,22 @@ def inserir_novas_escalas_drive(df_itens_faltantes, id_gsheet, nome_aba):
     data = df_itens_faltantes.values.tolist()
     sheet.update('A2', data)
 
+def puxar_dados_phoenix():
+
+    st.session_state.df_escalas = gerar_df_phoenix('vw_scales', st.session_state.base_luck)
+
+    st.session_state.df_motoristas = gerar_df_phoenix('vw_motoristas', 'test_phoenix_joao_pessoa')
+
+    st.session_state.df_motoristas = st.session_state.df_motoristas.rename(columns={'nickname': 'Motorista'})
+
+    st.session_state.df_guias = gerar_df_phoenix('vw_guias', 'test_phoenix_joao_pessoa')
+
+    st.session_state.df_guias = st.session_state.df_guias.rename(columns={'nickname': 'Guia'})
+
+    st.session_state.df_veiculos = gerar_df_phoenix('vw_veiculos', st.session_state.base_luck)
+
+    st.session_state.df_veiculos = st.session_state.df_veiculos.rename(columns={'name': 'Veiculo'})
+
 st.set_page_config(layout='wide')
 
 if not 'base_luck' in st.session_state:
@@ -146,7 +170,7 @@ if not 'df_escalas' in st.session_state:
 
     with st.spinner('Puxando dados do Phoenix...'):
 
-        st.session_state.df_escalas = gerar_df_phoenix('vw_scales', st.session_state.base_luck)
+        puxar_dados_phoenix()
 
 row0 = st.columns(1)
 
@@ -164,7 +188,7 @@ if atualizar_phoenix:
 
     with st.spinner('Puxando dados do Phoenix...'):
 
-        st.session_state.df_escalas = gerar_df_phoenix('vw_scales', st.session_state.base_luck)
+        puxar_dados_phoenix()
 
 with row1[0]:
 
@@ -188,12 +212,6 @@ if atualizar_escalas:
 
     df_escalas_a_atualizar = st.session_state.df_escalas[st.session_state.df_escalas['Escala'].isin(st.session_state.df_escalas_atualizar['Escala'].unique())].reset_index(drop=True)
 
-    df_id_veiculo = st.session_state.df_escalas[pd.notna(st.session_state.df_escalas['Veiculo'])][['Veiculo', 'ID Veiculo']].drop_duplicates().reset_index(drop=True)
-
-    df_id_motorista = st.session_state.df_escalas[pd.notna(st.session_state.df_escalas['Motorista'])][['Motorista', 'ID Motorista']].drop_duplicates().reset_index(drop=True)
-
-    df_id_guia = st.session_state.df_escalas[pd.notna(st.session_state.df_escalas['Guia'])][['Guia', 'ID Guia']].drop_duplicates().reset_index(drop=True)
-
     escalas_para_atualizar = []
 
     for index in range(len(st.session_state.df_escalas_atualizar)):
@@ -208,33 +226,25 @@ if atualizar_escalas:
 
         df_ref = df_escalas_a_atualizar[df_escalas_a_atualizar['Escala']==escala]
 
-        if len(df_ref)>0:
+        id_servicos = [int(item) for item in df_ref['ID Servico'].tolist()]
 
-            id_servicos = [int(item) for item in df_ref['ID Servico'].tolist()]
-    
-            date_str = df_ref['Data da Escala'].values[0].strftime('%Y-%m-%d')
-    
-            id_veiculo = int(df_id_veiculo[df_id_veiculo['Veiculo']==veiculo]['ID Veiculo'].iloc[0])
-    
-            id_motorista = int(df_id_motorista[df_id_motorista['Motorista']==motorista]['ID Motorista'].iloc[0])
-    
-            id_guia = int(df_id_guia[df_id_guia['Guia']==guia]['ID Guia'].iloc[0])
-    
-            payload = {
-                    "date": date_str,
-                    "vehicle_id": id_veiculo,
-                    "driver_id": id_motorista,
-                    "guide_id": id_guia,
-                    "reserve_service_ids": id_servicos,
-                }
-            
-            escalas_para_atualizar.append(payload)
+        date_str = df_ref['Data da Escala'].values[0].strftime('%Y-%m-%d')
 
-        else:
+        id_veiculo = int(st.session_state.df_veiculos[st.session_state.df_veiculos['Veiculo']==veiculo]['id'].iloc[0])
 
-            st.error(f'A escala {escala} não foi encontrada.')
+        id_motorista = int(st.session_state.df_motoristas[st.session_state.df_motoristas['Motorista']==motorista]['id'].iloc[0])
 
-            st.stop()
+        id_guia = int(st.session_state.df_guias[st.session_state.df_guias['Guia']==guia]['id'].iloc[0])
+
+        payload = {
+                "date": date_str,
+                "vehicle_id": id_veiculo,
+                "driver_id": id_motorista,
+                "guide_id": id_guia,
+                "reserve_service_ids": id_servicos,
+            }
+        
+        escalas_para_atualizar.append(payload)
 
     placeholder = st.empty()
     placeholder.dataframe(escalas_para_atualizar)
